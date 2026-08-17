@@ -1,0 +1,9 @@
+market,min_weight_g,max_weight_g,shipping_cost_jpy,shipping_method
+SG,0,250,1800,Standard
+SG,251,500,2300,Standard
+SG,501,1000,3200,Standard
+SG,1001,2000,4800,Standard
+MY,0,250,1700,Standard
+MY,251,500,2200,Standard
+MY,501,1000,3100,Standard
+MY,1001,2000,4600,Standard
