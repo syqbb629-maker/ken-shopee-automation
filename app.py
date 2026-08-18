@@ -55,6 +55,27 @@ def _render_shopee_connection() -> None:
         return
 
     st.link_button("SG/MY店舗をShopeeで認証", client.authorization_url())
+
+    auth_code = st.query_params.get("code")
+    auth_shop_id = st.query_params.get("shop_id")
+    if auth_code and auth_shop_id:
+        st.success(f"Shopeeから認証結果を受信しました（Shop ID: {auth_shop_id}）")
+        if st.button("認証コードをAccess Tokenへ交換", type="primary"):
+            try:
+                token_data = client.exchange_authorization_code(auth_code, int(auth_shop_id))
+                st.session_state["new_shopee_shop_id"] = str(auth_shop_id)
+                st.session_state["new_shopee_access_token"] = token_data["access_token"]
+                st.session_state["new_shopee_refresh_token"] = token_data.get("refresh_token", "")
+                st.query_params.clear()
+                st.rerun()
+            except (KeyError, ValueError, requests.RequestException, ShopeeAPIError) as exc:
+                st.error(f"トークン取得失敗: {exc}")
+
+    if st.session_state.get("new_shopee_access_token"):
+        st.success("Access Tokenを取得しました。秘密設定へ保存するまで画面を閉じないでください。")
+        st.text_input("認証済みShop ID", value=st.session_state["new_shopee_shop_id"], disabled=True)
+        st.text_input("新しいAccess Token", value=st.session_state["new_shopee_access_token"], type="password", disabled=True)
+        st.text_input("新しいRefresh Token", value=st.session_state.get("new_shopee_refresh_token", ""), type="password", disabled=True)
     cols = st.columns(2)
     for col, market in zip(cols, ("SG", "MY")):
         shop_id_text = _secret(f"SHOPEE_{market}_SHOP_ID")
