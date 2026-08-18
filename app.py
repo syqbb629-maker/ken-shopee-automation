@@ -12,15 +12,65 @@ app.py
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 
 import pandas as pd
+import requests
 import streamlit as st
 
 import config
 from src.pipeline import run_pipeline
 from src.product_master import load_product_master, save_product_master
+from src.shopee_api import ShopeeAPIError, ShopeeClient, ShopeeCredentials
+
+
+def _secret(name: str, default: str = "") -> str:
+    """Read a Streamlit secret first, then an environment variable."""
+    try:
+        value = st.secrets.get(name, default)
+    except Exception:
+        value = os.getenv(name, default)
+    return str(value).strip() if value is not None else default
+
+
+def _render_shopee_connection() -> None:
+    st.subheader("🔌 Shopee API接続")
+    required = ("SHOPEE_PARTNER_ID", "SHOPEE_PARTNER_KEY", "SHOPEE_REDIRECT_URL")
+    missing = [name for name in required if not _secret(name)]
+    if missing:
+        st.warning("API接続設定が未完了です（秘密情報は画面には表示しません）。")
+        st.caption("未設定: " + ", ".join(missing))
+        return
+
+    try:
+        client = ShopeeClient(ShopeeCredentials(
+            partner_id=int(_secret("SHOPEE_PARTNER_ID")),
+            partner_key=_secret("SHOPEE_PARTNER_KEY"),
+            redirect_url=_secret("SHOPEE_REDIRECT_URL"),
+            base_url=_secret("SHOPEE_BASE_URL", "https://partner.shopeemobile.com"),
+        ))
+    except ValueError:
+        st.error("SHOPEE_PARTNER_ID の形式が正しくありません。")
+        return
+
+    st.link_button("SG/MY店舗をShopeeで認証", client.authorization_url())
+    cols = st.columns(2)
+    for col, market in zip(cols, ("SG", "MY")):
+        shop_id_text = _secret(f"SHOPEE_{market}_SHOP_ID")
+        access_token = _secret(f"SHOPEE_{market}_ACCESS_TOKEN")
+        with col:
+            st.markdown(f"**{market}店舗**")
+            if not shop_id_text or not access_token:
+                st.info("未接続（Shop IDまたはAccess Tokenが未設定）")
+                continue
+            if st.button(f"{market} 接続テスト", key=f"test_{market.lower()}_connection"):
+                try:
+                    info = client.get_shop_info(access_token, int(shop_id_text))
+                    shop_name = info.get("shop_name") or info.get("shop_id") or shop_id_text
+                    st.success(f"接続成功: {shop_name}")
+                except (ValueError, requests.RequestException, ShopeeAPIError) as exc:
+                    st.error(f"接続失敗: {exc}")
 
 
 # ----------------------------------------------------------------------
@@ -59,14 +109,12 @@ def run_dry_run() -> None:
 def run_streamlit_app() -> None:
     st.set_page_config(page_title="Shopee ドラッグストア無在庫販売 管理画面", layout="wide")
 
-    # Go-Live review用の簡易ログイン。認証情報はコードに書かず、
-    # Streamlit CloudのSecretsまたは環境変数で設定します。
-    review_user = st.secrets.get("REVIEW_USERNAME", os.getenv("REVIEW_USERNAME", ""))
-    review_password = st.secrets.get("REVIEW_PASSWORD", os.getenv("REVIEW_PASSWORD", ""))
+    # Go-Live review login. Credentials stay in Streamlit Secrets.
+    review_user = _secret("REVIEW_USERNAME")
+    review_password = _secret("REVIEW_PASSWORD")
     if not review_user or not review_password:
         st.error("Review login is not configured. Set REVIEW_USERNAME and REVIEW_PASSWORD.")
         st.stop()
-
     if not st.session_state.get("authenticated", False):
         st.title("Ken Shopee Automation")
         st.caption("Authorized users only")
@@ -81,9 +129,13 @@ def run_streamlit_app() -> None:
         st.stop()
 
     st.title("🧴 Shopee ドラッグストア無在庫販売 管理画面 (V2)")
+
     if st.button("Sign out"):
         st.session_state["authenticated"] = False
         st.rerun()
+
+    _render_shopee_connection()
+    st.divider()
 
     if not config.PRODUCT_MASTER_PATH.exists():
         st.error(f"商品マスターが見つかりません: {config.PRODUCT_MASTER_PATH}")
