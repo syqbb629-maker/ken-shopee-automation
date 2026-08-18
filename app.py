@@ -18,6 +18,7 @@ import sys
 import pandas as pd
 import requests
 import streamlit as st
+import streamlit_authenticator as stauth
 
 import config
 from src.pipeline import run_pipeline
@@ -130,30 +131,40 @@ def run_dry_run() -> None:
 def run_streamlit_app() -> None:
     st.set_page_config(page_title="Shopee ドラッグストア無在庫販売 管理画面", layout="wide")
 
-    # Go-Live review login. Credentials stay in Streamlit Secrets.
+    # 30-day signed login cookie. Credentials and signing key stay in Secrets.
     review_user = _secret("REVIEW_USERNAME")
     review_password = _secret("REVIEW_PASSWORD")
-    if not review_user or not review_password:
-        st.error("Review login is not configured. Set REVIEW_USERNAME and REVIEW_PASSWORD.")
+    cookie_key = _secret("AUTH_COOKIE_KEY")
+    if not review_user or not review_password or not cookie_key:
+        st.error("Login is not configured. Set REVIEW_USERNAME, REVIEW_PASSWORD and AUTH_COOKIE_KEY.")
         st.stop()
-    if not st.session_state.get("authenticated", False):
-        st.title("Ken Shopee Automation")
-        st.caption("Authorized users only")
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        if st.button("Sign in", type="primary"):
-            if username == review_user and password == review_password:
-                st.session_state["authenticated"] = True
-                st.rerun()
-            else:
-                st.error("Invalid username or password")
+
+    credentials = {
+        "usernames": {
+            review_user: {
+                "email": "",
+                "first_name": "Ken",
+                "last_name": "Asano",
+                "password": review_password,
+            }
+        }
+    }
+    authenticator = stauth.Authenticate(
+        credentials,
+        "ken_shopee_login",
+        cookie_key,
+        30,
+    )
+    authenticator.login()
+    if st.session_state.get("authentication_status") is False:
+        st.error("Invalid username or password")
+        st.stop()
+    if st.session_state.get("authentication_status") is not True:
         st.stop()
 
     st.title("🧴 Shopee ドラッグストア無在庫販売 管理画面 (V2)")
 
-    if st.button("Sign out"):
-        st.session_state["authenticated"] = False
-        st.rerun()
+    authenticator.logout("Sign out", "main")
 
     _render_shopee_connection()
     st.divider()
