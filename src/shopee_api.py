@@ -76,3 +76,19 @@ class ShopeeClient:
             raise ShopeeAPIError(payload.get("message") or payload["error"])
         return payload.get("response", payload)
 
+    def exchange_authorization_code(self, code: str, shop_id: int) -> dict[str, Any]:
+        path = "/api/v2/auth/token/get"
+        timestamp = int(time.time())
+        partner_id = self.credentials.partner_id
+        sign = self._sign(f"{partner_id}{path}{timestamp}")
+        response = requests.post(
+            f"{self.credentials.base_url}{path}",
+            params={"partner_id": partner_id, "timestamp": timestamp, "sign": sign},
+            json={"code": code, "shop_id": shop_id, "partner_id": partner_id},
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("error"):
+            raise ShopeeAPIError(payload.get("message") or payload["error"])
+        return payload
