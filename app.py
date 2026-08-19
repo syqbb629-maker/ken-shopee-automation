@@ -143,8 +143,23 @@ def _render_first_sg_item() -> None:
             image_response = requests.get(FIRST_SG_ITEM["image_url"], timeout=30)
             image_response.raise_for_status()
             image_id = client.upload_image_bytes(token, shop_id, image_response.content)
-            category = client.recommend_category(token, shop_id, FIRST_SG_ITEM["product_name_en"])
-            category_id = int(category.get("category_id") or 0)
+            try:
+                category = client.recommend_category(token, shop_id, FIRST_SG_ITEM["product_name_en"])
+                category_id = int(category.get("category_id") or 0)
+            except (requests.RequestException, ShopeeAPIError):
+                categories = client.get_categories(token, shop_id)
+                matches = [
+                    category for category in categories
+                    if "cleanser" in str(category.get("display_category_name", "")).lower()
+                    and not category.get("has_children", False)
+                ]
+                if not matches:
+                    matches = [
+                        category for category in categories
+                        if "face" in str(category.get("display_category_name", "")).lower()
+                        and not category.get("has_children", False)
+                    ]
+                category_id = int(matches[0].get("category_id", 0)) if matches else 0
             channels = client.get_logistics_channels(token, shop_id)
             enabled = [c for c in channels if c.get("enabled") is not False]
             if not category_id:
