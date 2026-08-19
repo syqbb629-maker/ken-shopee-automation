@@ -130,6 +130,23 @@ class ShopeeClient:
             raise ShopeeAPIError(payload.get("message") or payload["error"])
         return payload.get("response", payload)
 
+    def get_categories(
+        self, access_token: str, shop_id: int
+    ) -> list[dict[str, Any]]:
+        """Return the shop's currently available Shopee categories."""
+        path = "/api/v2/product/get_category"
+        response = requests.get(
+            f"{self.credentials.base_url}{path}",
+            params=self._shop_params(path, access_token, shop_id),
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("error"):
+            raise ShopeeAPIError(payload.get("message") or payload["error"])
+        body = payload.get("response", payload)
+        return body.get("category_list", [])
+
     def get_logistics_channels(
         self, access_token: str, shop_id: int
     ) -> list[dict[str, Any]]:
