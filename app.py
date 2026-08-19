@@ -24,6 +24,7 @@ import config
 from src.pipeline import run_pipeline
 from src.product_master import load_product_master, save_product_master
 from src.shopee_api import ShopeeAPIError, ShopeeClient, ShopeeCredentials
+from src.shopee_listing import build_sg_unlisted_payload
 
 
 def _secret(name: str, default: str = "") -> str:
@@ -232,6 +233,36 @@ def run_streamlit_app() -> None:
         use_container_width=True,
         hide_index=True,
     )
+
+    st.divider()
+    st.subheader("🇸🇬 SG 1件目の自動出品テスト")
+    st.caption(
+        "安全のため、最初は公開せずUNLIST（非公開）で作成します。"
+        "医薬品・サプリ、架空データ、未確認画像は自動的に止めます。"
+    )
+    ready_rows = df[df["listing_status"] == config.ListingStatus.READY_TO_LIST]
+    preview_options = ready_rows["item_id"].astype(str).tolist()
+    preview_item_id = st.selectbox(
+        "テスト対象item_id", options=[""] + preview_options, key="sg_preview_item_id"
+    )
+    if preview_item_id:
+        preview_row = ready_rows.loc[
+            ready_rows["item_id"].astype(str) == preview_item_id
+        ].iloc[0].to_dict()
+        preflight = build_sg_unlisted_payload(preview_row)
+        st.write(f"商品名: {preview_row.get('product_name_en', '')}")
+        st.write(f"SG価格: {preview_row.get('sg_price', '')} SGD")
+        if preflight.ready:
+            st.success("非公開テスト登録の準備が整っています。")
+            st.info("実登録ボタンは、商品・カテゴリ・物流・画像IDの最終確認後に有効化します。")
+        else:
+            st.warning("この商品はまだShopeeへ送りません。次の確認が必要です。")
+            for blocker in preflight.blockers:
+                st.write(f"・{blocker}")
+    elif preview_options:
+        st.info("上の欄から1件選ぶと、出品前の安全検査結果を表示します。")
+    else:
+        st.warning("READY_TO_LISTの商品がありません。先に①商品検査を実行してください。")
 
     st.divider()
     st.subheader("停止候補にする")
