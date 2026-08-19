@@ -1,4 +1,4 @@
-"""Minimal Shopee Open Platform v2 client used for connection checks."""
+"""Minimal Shopee Open Platform v2 client used by the management app."""
 
 from __future__ import annotations
 
@@ -92,3 +92,22 @@ class ShopeeClient:
         if payload.get("error"):
             raise ShopeeAPIError(payload.get("message") or payload["error"])
         return payload
+
+    def add_item_unlisted(
+        self, access_token: str, shop_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Create one Shopee item, refusing any payload that could go live."""
+        if payload.get("item_status") != "UNLIST":
+            raise ValueError("Safety check: new API items must use item_status=UNLIST")
+        path = "/api/v2/product/add_item"
+        response = requests.post(
+            f"{self.credentials.base_url}{path}",
+            params=self._shop_params(path, access_token, shop_id),
+            json=payload,
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        result = response.json()
+        if result.get("error"):
+            raise ShopeeAPIError(result.get("message") or result["error"])
+        return result.get("response", result)
