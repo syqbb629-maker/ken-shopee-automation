@@ -111,3 +111,62 @@ class ShopeeClient:
         if result.get("error"):
             raise ShopeeAPIError(result.get("message") or result["error"])
         return result.get("response", result)
+
+    def recommend_category(
+        self, access_token: str, shop_id: int, item_name: str
+    ) -> dict[str, Any]:
+        path = "/api/v2/product/category_recommend"
+        response = requests.get(
+            f"{self.credentials.base_url}{path}",
+            params={
+                **self._shop_params(path, access_token, shop_id),
+                "item_name": item_name,
+            },
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("error"):
+            raise ShopeeAPIError(payload.get("message") or payload["error"])
+        return payload.get("response", payload)
+
+    def get_logistics_channels(
+        self, access_token: str, shop_id: int
+    ) -> list[dict[str, Any]]:
+        path = "/api/v2/logistics/get_channel_list"
+        response = requests.get(
+            f"{self.credentials.base_url}{path}",
+            params=self._shop_params(path, access_token, shop_id),
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("error"):
+            raise ShopeeAPIError(payload.get("message") or payload["error"])
+        body = payload.get("response", payload)
+        return body.get("logistics_channel_list", [])
+
+    def upload_image_bytes(
+        self,
+        access_token: str,
+        shop_id: int,
+        image_bytes: bytes,
+        filename: str = "product.jpg",
+    ) -> str:
+        path = "/api/v2/media_space/upload_image"
+        response = requests.post(
+            f"{self.credentials.base_url}{path}",
+            params=self._shop_params(path, access_token, shop_id),
+            files={"image": (filename, image_bytes, "image/jpeg")},
+            timeout=max(self.timeout, 45),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("error"):
+            raise ShopeeAPIError(payload.get("message") or payload["error"])
+        body = payload.get("response", payload)
+        image_info = body.get("image_info", body)
+        image_id = image_info.get("image_id")
+        if not image_id:
+            raise ShopeeAPIError("Shopee画像IDを取得できませんでした")
+        return str(image_id)
